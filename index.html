@@ -3,77 +3,358 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Verbópolis v4 · Aula</title>
-  <meta name="description" content="App gamificada para estudiar verbos en tercer ciclo de Primaria y registrar progreso en Google Sheets." />
+  <title>Verbópolis · La ciudad de los verbos</title>
+  <meta name="description" content="App gamificada para aprender los verbos y sus conjugaciones en tercer ciclo de Primaria: aventura por mundos, retos, evaluaciones con nota y panel docente." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:ital,wght@0,400;0,700;0,900;1,400&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🏰</text></svg>" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <!-- ====== PANTALLA DE ENTRADA ====== -->
   <div id="loginScreen" class="login-screen">
+    <div class="login-sky" aria-hidden="true">
+      <span class="cloud c1">☁️</span><span class="cloud c2">☁️</span><span class="cloud c3">☁️</span>
+      <span class="float-emoji f1">📖</span><span class="float-emoji f2">✏️</span><span class="float-emoji f3">⭐</span>
+    </div>
     <section class="login-card">
-      <div class="brand big"><div class="brand-mark">V</div><div><p class="eyebrow">Lengua · Tercer ciclo Primaria</p><h1>Verbópolis Aula</h1></div></div>
-      <p class="lead">Elige tu perfil, completa misiones, estudia verbos y suma XP. El progreso puede guardarse automáticamente en la hoja del maestro.</p>
-      <div class="sync-banner" id="loginSyncState">☁️ Google Sheets configurado</div>
+      <div class="brand-hero">
+        <span class="brand-castle">🏰</span>
+        <h1>Verbópolis</h1>
+        <p class="brand-tag">La ciudad donde los verbos cobran vida</p>
+      </div>
+      <div class="sync-banner" id="loginSyncState">☁️ Conectado</div>
       <div class="login-toolbar">
-        <label>Filtrar por grupo
+        <label>Mi grupo
           <select id="loginGroupFilter"><option value="all">Todos los grupos</option></select>
         </label>
-        <button id="teacherLoginBtn" class="ghost">🔒 Entrar como maestro/a</button>
+        <button id="teacherLoginBtn" class="ghost">🔒 Zona maestro/a</button>
       </div>
-      <h2>¿Quién va a jugar?</h2>
+      <h2>¿Quién va a jugar hoy?</h2>
       <div id="studentGrid" class="student-grid"></div>
-      <div class="login-actions student-only-setup">
-        <input id="newStudentName" placeholder="Nombre o alias del alumno/a" maxlength="32" />
-        <select id="newStudentGroup"><option>5.ºA</option><option>5.ºB</option><option>6.ºA</option><option>6.ºB</option></select>
-        <button id="addStudentBtn" class="secondary">Añadir</button>
+      <div class="login-actions">
+        <input id="newStudentName" placeholder="Tu nombre o alias" maxlength="32" />
+        <select id="newStudentGroup"></select>
+        <button id="addStudentBtn" class="secondary">➕ Crear personaje</button>
       </div>
-      <p class="tiny">Recomendación: usa nombre de pila, iniciales o alias. No hace falta contraseña para alumnado.</p>
+      <p class="tiny">Usa tu nombre de pila, iniciales o un alias. Sin contraseñas.</p>
     </section>
   </div>
 
+  <!-- ====== APLICACIÓN ====== -->
   <div class="app-shell hidden" id="appShell">
     <header class="topbar">
-      <div class="brand" role="banner"><div class="brand-mark" aria-hidden="true">V</div><div><p class="eyebrow" id="groupLabel">Verbópolis Aula</p><h1>Entrena tus verbos</h1></div></div>
-      <div class="player-panel" aria-label="Perfil del alumno">
-        <button id="switchStudentBtn" class="ghost small">Cambiar perfil</button>
-        <div class="player-avatar" id="playerAvatar" aria-hidden="true">🦉</div>
-        <div class="player-meta"><strong id="playerName">Alumno/a</strong><span id="playerLevel">Nivel 1 · Aprendiz</span></div>
-        <div class="xp-wrap" title="Experiencia"><div class="xp-bar"><span id="xpBar"></span></div><small id="xpText">0 XP</small></div>
+      <div class="brand-mini">🏰 <strong>Verbópolis</strong> <small id="groupLabel"></small></div>
+      <div class="player-panel">
+        <span id="streakFlame" class="streak-flame" title="Días seguidos jugando">🔥 1 día</span>
+        <div class="player-avatar" id="playerAvatar">🦉</div>
+        <div class="player-meta">
+          <strong id="playerName">Alumno/a</strong>
+          <span id="rankBadge" class="rank-badge">🌱 <span>Semilla Verbal</span></span>
+        </div>
+        <div class="xp-wrap" title="Experiencia">
+          <div class="xp-bar"><span id="xpBar"></span></div>
+          <small id="xpText">0 XP</small>
+        </div>
+        <button id="switchStudentBtn" class="ghost small">Salir</button>
       </div>
     </header>
 
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab active" data-view="adventure">🗺️ Aventura</button>
+      <button class="tab" data-view="arena">⚔️ Arena</button>
+      <button class="tab" data-view="study">📖 Laboratorio</button>
+      <button class="tab" data-view="review">🔁 Repaso</button>
+      <button class="tab" data-view="progress">🏅 Mi progreso</button>
+      <button class="tab exam-tab hidden" data-view="exam" id="examTab">📝 Examen</button>
+      <button class="tab teacher-tab" data-view="teacher">🔒 Maestro/a</button>
+    </nav>
+
     <main>
-      <section class="hero card">
-        <div class="hero-copy"><p class="badge">Misión activa</p><h2 id="heroTitle">Conquista los tiempos verbales.</h2><p id="heroDesc">Completa la misión configurada para tu grupo o juega un reto de entrenamiento.</p><div class="hero-actions"><button class="primary" data-view="play">Empezar reto</button><button class="secondary" data-view="study">Estudiar antes</button><button class="ghost" data-view="dashboard">Mi progreso</button></div></div>
-        <div class="daily-card"><span id="missionIcon">🎯</span><h3 id="dailyGoal">Objetivo: 5 aciertos seguidos</h3><p id="dailyHint">Entrena sin miedo: equivocarse desbloquea repasos inteligentes.</p><div id="cloudState" class="cloud-state">☁️ Sin sincronizar aún</div></div>
+      <!-- AVENTURA -->
+      <section id="view-adventure" class="view active">
+        <div id="missionBanner" class="mission-banner hidden"></div>
+        <div class="adventure-head">
+          <h2>El mapa de Verbópolis</h2>
+          <span id="starCount" class="star-count">⭐ 0/87</span>
+        </div>
+        <div id="worldMap" class="world-map"></div>
       </section>
 
-      <nav class="tabs student-tabs" aria-label="Secciones"><button class="tab active" data-view="play">Jugar</button><button class="tab" data-view="study">Estudiar</button><button class="tab" data-view="review">Repasar errores</button><button class="tab" data-view="dashboard">Mi progreso</button><button class="tab teacher-tab" data-view="teacher">🔒 Maestro/a</button></nav>
-
-      <section id="play" class="view active">
-        <div class="grid two"><article class="card"><div class="card-head"><div><p class="badge">Reto gamificado</p><h2>La arena de las conjugaciones</h2></div><select id="difficultySelect"><option value="easy">Explorador</option><option value="normal" selected>Valiente</option><option value="hard">Leyenda</option></select></div>
-          <div class="mode-grid"><button class="mode" data-mode="mission">🎯<strong>Misión del grupo</strong><span>Lo que toca hoy</span></button><button class="mode" data-mode="mixed">🎲<strong>Reto mixto</strong><span>Preguntas variadas</span></button><button class="mode" data-mode="conjugate">✍️<strong>Conjuga</strong><span>Escribe la forma verbal</span></button><button class="mode" data-mode="choose">🧠<strong>Elige</strong><span>Escoge la opción correcta</span></button><button class="mode" data-mode="detective">🔎<strong>Detective verbal</strong><span>Analiza persona y tiempo</span></button><button class="mode" data-mode="exam">📝<strong>Evaluación</strong><span>Sin pistas y con nota</span></button></div>
-          <div class="game-panel"><div class="hud"><span id="hearts">❤️❤️❤️</span><span id="scoreText">0 puntos</span><span id="roundText">0/10</span></div><h3 id="gameModeLabel">Elige un modo para empezar</h3><div id="questionArea" class="question-area empty-state"><span>🗺️</span><p>Selecciona un modo y comienza tu expedición verbal.</p></div><div id="feedback" class="feedback"></div></div>
-        </article><aside class="card"><p class="badge">Mapa de progreso</p><h2>Reinos desbloqueados</h2><div id="worldMap" class="world-map"></div></aside></div>
+      <!-- ARENA -->
+      <section id="view-arena" class="view">
+        <article class="card">
+          <div class="card-head">
+            <div><p class="badge">Práctica libre</p><h2>La Arena de las Conjugaciones</h2></div>
+            <div class="arena-filters">
+              <label>Tiempo verbal<select id="arenaTense"></select></label>
+              <label>Dificultad
+                <select id="difficultySelect">
+                  <option value="easy">🐣 Explorador (4 ❤️)</option>
+                  <option value="normal" selected>🦊 Valiente (3 ❤️)</option>
+                  <option value="hard">🐉 Leyenda (2 ❤️)</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <p class="tiny" id="arenaInfo"></p>
+          <div id="arenaModes" class="mode-grid"></div>
+        </article>
       </section>
 
-      <section id="study" class="view"><div class="grid two"><article class="card"><div class="card-head"><div><p class="badge">Modo estudio</p><h2>Laboratorio de verbos</h2></div><button id="speakTable" class="ghost">Leer en voz alta</button></div><div class="filters"><label>Verbo<select id="verbSelect"></select></label><label>Tiempo<select id="tenseSelect"></select></label><label>Modo memoria<select id="memoryMode"><option value="normal">Tabla completa</option><option value="cloze">Tapar algunas formas</option><option value="colour">Raíz y terminación</option><option value="big">Modo accesible</option></select></label></div><div id="studyCard" class="study-card"><p id="studyMeta" class="mini-context"></p><h3 id="studyTitle"></h3><div id="conjTable" class="conj-table"></div><button id="toggleIrregular" class="secondary">Ver truco</button><div id="verbTip" class="tip hidden"></div></div></article><aside class="card"><p class="badge">Mini estrategia</p><h2>Cómo estudiar en 4 pasos</h2><ol class="teacher-list"><li>Lee la tabla en voz alta.</li><li>Tapa dos formas y recítalas.</li><li>Escribe tres formas sin mirar.</li><li>Haz un reto corto y revisa errores.</li></ol><div class="callout">💡 Ideal para rincones de Lengua: 8-10 minutos por pareja y rotación.</div></aside></div></section>
+      <!-- LABORATORIO -->
+      <section id="view-study" class="view">
+        <div class="grid two">
+          <article class="card">
+            <div class="card-head">
+              <div><p class="badge">Modo estudio</p><h2>Laboratorio de verbos</h2></div>
+              <button id="speakTable" class="ghost">🔊 Leer en voz alta</button>
+            </div>
+            <div class="filters">
+              <label>Buscar verbo<input id="verbSearch" placeholder="escribe para filtrar…" /></label>
+              <label>Verbo<select id="verbSelect"></select></label>
+              <label>Modo<select id="studyMood"></select></label>
+              <label>Tiempo<select id="studyTense"></select></label>
+              <label>Cómo verlo
+                <select id="memoryMode">
+                  <option value="normal">Tabla completa</option>
+                  <option value="colour">Raíz y terminación</option>
+                  <option value="cloze">Tapar formas (memoriza)</option>
+                </select>
+              </label>
+            </div>
+            <div class="study-card">
+              <p id="studyMeta" class="mini-context"></p>
+              <h3 id="studyTitle"></h3>
+              <div id="conjTable" class="conj-table"></div>
+              <div id="nonPersonal" class="non-personal"></div>
+              <button id="toggleTip" class="secondary small">💡 Ver truco</button>
+              <div id="verbTip" class="tip hidden"></div>
+            </div>
+          </article>
+          <aside class="card">
+            <p class="badge">Mini estrategia</p>
+            <h2>Estudiar en 4 pasos</h2>
+            <ol class="teacher-list">
+              <li>Lee la tabla en voz alta (o pulsa 🔊).</li>
+              <li>Cambia a «Tapar formas» y recítalas.</li>
+              <li>Escribe tres formas sin mirar.</li>
+              <li>Ve a la Arena y haz un reto corto.</li>
+            </ol>
+            <div class="callout">🪄 En «Raíz y terminación» la parte azul casi nunca cambia… ¡y la naranja es la que tienes que dominar!</div>
+          </aside>
+        </div>
+      </section>
 
-      <section id="review" class="view"><div class="grid two"><article class="card"><p class="badge">Repaso inteligente</p><h2>Mis errores pendientes</h2><div id="mistakeList"></div><button id="practiceMistakes" class="primary">Practicar solo mis errores</button></article><aside class="card"><p class="badge">Insignias</p><h2>Logros desbloqueados</h2><div id="badges" class="badges"></div></aside></div></section>
+      <!-- REPASO -->
+      <section id="view-review" class="view">
+        <div class="grid two">
+          <article class="card">
+            <p class="badge">Repaso inteligente</p>
+            <h2>Mis errores pendientes: <span id="reviewCount">0</span></h2>
+            <div id="mistakeList"></div>
+            <button id="practiceMistakes" class="primary big">🔁 Practicar mis errores</button>
+            <p class="tiny">Cada error que corrijas desaparece de la lista. Llevas <strong id="reviewFixed">0</strong> errores cazados.</p>
+          </article>
+          <aside class="card">
+            <p class="badge">¿Sabías que…?</p>
+            <h2>Equivocarse mola</h2>
+            <p>Tu cerebro aprende más cuando falla y lo corrige que cuando acierta a la primera. Esta lista es tu <strong>arma secreta</strong> para subir de rango. 🚀</p>
+          </aside>
+        </div>
+      </section>
 
-      <section id="dashboard" class="view"><div class="grid three"><article class="stat card"><span id="statXp">0</span><p>XP</p></article><article class="stat card"><span id="statAccuracy">0%</span><p>Acierto</p></article><article class="stat card"><span id="statStreak">0</span><p>Mejor racha</p></article></div><div class="grid two"><article class="card"><p class="badge">Mi camino</p><h2>Última actividad</h2><div id="activityLog"></div></article><article class="card"><p class="badge">Sincronización</p><h2>Cola de envío</h2><div id="syncPanel"></div><button id="forceSyncBtn" class="secondary">Enviar datos pendientes</button></article></div></section>
+      <!-- MI PROGRESO -->
+      <section id="view-progress" class="view">
+        <div class="progress-head">
+          <div id="progressRank" class="progress-rank"></div>
+          <div class="grid four stats-grid">
+            <article class="stat card"><span id="statXp">0</span><p>XP total</p></article>
+            <article class="stat card"><span id="statAccuracy">0%</span><p>Acierto</p></article>
+            <article class="stat card"><span id="statStreak">0</span><p>Mejor racha</p></article>
+            <article class="stat card"><span id="statDays">0</span><p>Días seguidos</p></article>
+          </div>
+        </div>
+        <div class="grid two">
+          <article class="card">
+            <p class="badge">Mi dominio</p><h2>Tiempos verbales</h2>
+            <div id="masteryBars"></div>
+          </article>
+          <article class="card">
+            <p class="badge">Liga semanal</p><h2>Podio de mi grupo</h2>
+            <div id="podium"></div>
+            <p class="tiny">La liga se reinicia cada semana: ¡todos pueden ganarla!</p>
+          </article>
+        </div>
+        <article class="card">
+          <p class="badge">Vitrina</p><h2>Mis insignias</h2>
+          <div id="badges" class="badges"></div>
+        </article>
+        <div class="grid three">
+          <article class="card"><p class="badge">Evaluaciones</p><h2>Mis notas</h2><div id="myExams"></div></article>
+          <article class="card"><p class="badge">Mi camino</p><h2>Última actividad</h2><div id="activityLog"></div></article>
+          <article class="card"><p class="badge">Nube</p><h2>Sincronización</h2><div id="syncPanel"></div><button id="forceSyncBtn" class="secondary small">📡 Enviar pendientes</button></article>
+        </div>
+      </section>
 
-      <section id="teacher" class="view teacher-view"><div class="teacher-layout">
-        <aside class="card teacher-menu"><p class="badge">Zona maestro/a</p><h2>Panel docente</h2><button class="teacher-nav active" data-teacher-panel="overview">📊 Resumen</button><button class="teacher-nav" data-teacher-panel="missions">🎯 Misiones</button><button class="teacher-nav" data-teacher-panel="groups">👥 Alumnos y grupos</button><button class="teacher-nav" data-teacher-panel="settings">⚙️ Configuración</button><button class="teacher-nav" data-teacher-panel="print">🖨️ Fichas</button><button id="lockTeacherBtn" class="ghost danger full">Cerrar zona maestro/a</button><p class="tiny">Código de acceso configurado: el de aula. Esta protección evita cotilleo, no sustituye seguridad avanzada.</p></aside>
-        <section class="teacher-panels">
-          <article id="teacher-overview" class="card teacher-panel active"><p class="badge">Seguimiento local</p><h2>Resumen de este ordenador</h2><div id="classSummary"></div><h3>Radar docente</h3><div id="teacherRadar" class="radar-grid"></div><div class="row-wrap"><button id="exportAllCsv" class="secondary">Exportar CSV local</button><button id="syncAllBtn" class="primary">Sincronizar todo</button></div></article>
-          <article id="teacher-missions" class="card teacher-panel"><p class="badge">Misiones por sesión</p><h2>Configura qué practicar hoy</h2><div class="grid two compact"><label>Grupo<select id="missionGroup"></select></label><label>Título<input id="missionTitle" placeholder="Misión del día" /></label><label>Tiempo<select id="missionTense"></select></label><label>Tipo<select id="missionMode"><option value="mixed">Mixto</option><option value="conjugate">Conjugar</option><option value="choose">Elegir</option><option value="detective">Detective</option></select></label><label>Número de preguntas<input id="missionRounds" type="number" min="5" max="20" value="10" /></label><label>Objetivo de acierto %<input id="missionTarget" type="number" min="50" max="100" value="80" /></label></div><label>Verbos de la misión<select id="missionVerbs" multiple size="8"></select><small class="hint">Mantén pulsado Ctrl/Cmd para elegir varios. Si no eliges ninguno, entran todos.</small></label><button id="saveMissionBtn" class="primary">Guardar misión</button><div id="missionList"></div></article>
-          <article id="teacher-groups" class="card teacher-panel"><p class="badge">Gestión simple</p><h2>Alumnado y grupos</h2><div class="grid two compact"><label>Nuevo grupo<input id="newGroupName" placeholder="5.ºC" /></label><button id="addGroupBtn" class="secondary align-end">Añadir grupo</button></div><div id="groupStudentList"></div></article>
-          <article id="teacher-settings" class="card teacher-panel"><p class="badge">Conexión y accesibilidad</p><h2>Ajustes de aula</h2><label>URL de Apps Script<input id="backendUrlInput" placeholder="https://script.google.com/macros/s/.../exec" /></label><label>Código de aula<input id="classCodeInput" placeholder="6A-LENGUA" /></label><div class="row-wrap"><button id="saveBackendBtn" class="primary">Guardar conexión</button><button id="testBackendBtn" class="ghost">Probar conexión</button><button id="clearBackendBtn" class="ghost danger">Desconectar</button></div><hr><label><input type="checkbox" id="accessibleToggle" /> Activar modo accesible en este ordenador</label><label><input type="checkbox" id="quietToggle" /> Reducir animaciones y estímulos</label><p class="tiny">El modo accesible aumenta letra, reduce carga visual y facilita lectura en pantalla.</p></article>
-          <article id="teacher-print" class="card teacher-panel"><p class="badge">Ficha imprimible</p><h2>Generador de misión en papel</h2><button id="makeWorksheet" class="secondary">Crear ficha nueva</button><button onclick="window.print()" class="ghost">Imprimir</button><div id="worksheet" class="worksheet"></div></article>
-        </section>
-      </div></section>
+      <!-- EXAMEN -->
+      <section id="view-exam" class="view">
+        <article class="card">
+          <p class="badge">Evaluación</p>
+          <h2>Exámenes disponibles</h2>
+          <p class="tiny">Sin pistas, sin corazones. Tu nota llegará automáticamente al maestro/a. ¡Tú puedes!</p>
+          <div id="examList"></div>
+        </article>
+      </section>
+
+      <!-- MAESTRO/A -->
+      <section id="view-teacher" class="view teacher-view">
+        <div class="teacher-layout">
+          <aside class="card teacher-menu">
+            <p class="badge">Zona maestro/a</p>
+            <h2>Panel docente</h2>
+            <button class="teacher-nav active" data-teacher-panel="overview">📊 Resumen</button>
+            <button class="teacher-nav" data-teacher-panel="progressmap">🗺️ Progreso y dominio</button>
+            <button class="teacher-nav" data-teacher-panel="exams">📝 Evaluaciones y notas</button>
+            <button class="teacher-nav" data-teacher-panel="missions">🎯 Misiones</button>
+            <button class="teacher-nav" data-teacher-panel="groups">👥 Alumnado</button>
+            <button class="teacher-nav" data-teacher-panel="settings">⚙️ Ajustes</button>
+            <button class="teacher-nav" data-teacher-panel="print">🖨️ Fichas</button>
+            <button id="lockTeacherBtn" class="ghost danger full">Cerrar zona maestro/a</button>
+            <p class="tiny">Los datos de esta pantalla son los de este ordenador. La hoja de Google Sheets reúne los de toda el aula.</p>
+          </aside>
+          <section class="teacher-panels">
+
+            <article id="teacher-overview" class="card teacher-panel active">
+              <p class="badge">Seguimiento</p><h2>Resumen del aula</h2>
+              <div id="classSummary"></div>
+              <h3>Radar docente</h3>
+              <div id="teacherRadar" class="radar-grid"></div>
+              <div class="row-wrap">
+                <button id="exportAllCsv" class="secondary">⬇️ Exportar progreso (CSV)</button>
+                <button id="syncAllBtn" class="primary">📡 Sincronizar todo</button>
+              </div>
+            </article>
+
+            <article id="teacher-progressmap" class="card teacher-panel">
+              <p class="badge">Aventura y dominio</p><h2>Progreso por grupo</h2>
+              <label class="inline-label">Grupo <select id="progressGroup"></select></label>
+              <div id="progressTable"></div>
+              <h3>Mapa de calor: dominio por tiempo verbal</h3>
+              <div id="masteryHeatmap" class="heat-wrap"></div>
+            </article>
+
+            <article id="teacher-exams" class="card teacher-panel">
+              <p class="badge">Evaluación a medida</p><h2>Crear evaluación</h2>
+              <p class="tiny">Elige solo lo que ya habéis trabajado en clase. La nota (sobre 10) se calcula sola y queda registrada aquí y en Google Sheets.</p>
+              <div class="grid two compact">
+                <label>Título<input id="examTitle" placeholder="Control tema 7: presente e imperfecto" /></label>
+                <label>Grupo<select id="examGroup"></select></label>
+                <label>Tiempos a evaluar<select id="examTenses" multiple size="6"></select></label>
+                <label>Verbos (vacío = todos)<select id="examVerbs" multiple size="6"></select></label>
+                <label>Tipos de pregunta<select id="examTypes" multiple size="4"></select></label>
+                <label>Número de preguntas<input id="examN" type="number" min="5" max="25" value="10" /></label>
+              </div>
+              <label class="check-label"><input type="checkbox" id="examStrict" /> Las tildes cuentan (modo estricto)</label>
+              <div class="row-wrap">
+                <button id="createExamBtn" class="primary">📝 Crear evaluación</button>
+                <button id="exportGradesCsv" class="secondary">⬇️ Exportar notas (CSV)</button>
+              </div>
+              <h3>Libro de calificaciones</h3>
+              <div id="examManageList"></div>
+            </article>
+
+            <article id="teacher-missions" class="card teacher-panel">
+              <p class="badge">Misión del día</p><h2>Configura la sesión</h2>
+              <p class="tiny">La misión aparece destacada al alumnado de ese grupo y da XP doble.</p>
+              <div class="grid two compact">
+                <label>Grupo<select id="missionGroup"></select></label>
+                <label>Título<input id="missionTitle" placeholder="Operación pretérito" /></label>
+                <label>Tiempo<select id="missionTense"></select></label>
+                <label>Preguntas<input id="missionRounds" type="number" min="5" max="20" value="10" /></label>
+              </div>
+              <label>Verbos de la misión (vacío = todos)<select id="missionVerbs" multiple size="8"></select></label>
+              <div class="row-wrap">
+                <button id="saveMissionBtn" class="primary">Guardar misión</button>
+                <button id="clearMissionBtn" class="ghost danger">Quitar misión del grupo</button>
+              </div>
+              <div id="missionList"></div>
+            </article>
+
+            <article id="teacher-groups" class="card teacher-panel">
+              <p class="badge">Gestión</p><h2>Alumnado y grupos</h2>
+              <div class="grid two compact">
+                <label>Nuevo grupo<input id="newGroupName" placeholder="5.ºC" /></label>
+                <button id="addGroupBtn" class="secondary align-end">Añadir grupo</button>
+              </div>
+              <div id="groupStudentList"></div>
+            </article>
+
+            <article id="teacher-settings" class="card teacher-panel">
+              <p class="badge">Conexión y aula</p><h2>Ajustes</h2>
+              <label>URL de Apps Script<input id="backendUrlInput" placeholder="https://script.google.com/macros/s/…/exec" /></label>
+              <label>Código de aula<input id="classCodeInput" placeholder="CEIP-6A" /></label>
+              <div class="row-wrap">
+                <button id="saveBackendBtn" class="primary">Guardar conexión</button>
+                <button id="testBackendBtn" class="ghost">Probar conexión</button>
+                <button id="publishConfigBtn" class="secondary">📡 Publicar misiones y exámenes a toda el aula</button>
+              </div>
+              <hr>
+              <h3>Ritmo de la clase</h3>
+              <p class="tiny">Limita hasta qué nivel de la aventura puede llegar cada grupo, para ir al compás de lo que enseñas.</p>
+              <div id="limitsList" class="limits-list"></div>
+              <button id="saveLimitsBtn" class="secondary">Guardar límites</button>
+              <hr>
+              <h3>Accesibilidad y ambiente</h3>
+              <label class="check-label"><input type="checkbox" id="accessibleToggle" /> Modo accesible (letra grande, menos carga visual)</label>
+              <label class="check-label"><input type="checkbox" id="quietToggle" /> Modo tranquilo (sin animaciones ni confeti)</label>
+              <label class="check-label"><input type="checkbox" id="soundToggle" /> Efectos de sonido</label>
+              <label class="check-label"><input type="checkbox" id="strictToggle" /> Las tildes cuentan también al entrenar</label>
+            </article>
+
+            <article id="teacher-print" class="card teacher-panel">
+              <p class="badge">Papel y lápiz</p><h2>Generador de fichas</h2>
+              <p class="tiny">Usa los tiempos y verbos marcados en «Evaluaciones» como plantilla, o genera una ficha variada.</p>
+              <div class="row-wrap">
+                <button id="makeWorksheet" class="secondary">✨ Crear ficha nueva</button>
+                <button id="printBtn" class="ghost">🖨️ Imprimir</button>
+              </div>
+              <div id="worksheet" class="worksheet"></div>
+            </article>
+
+          </section>
+        </div>
+      </section>
     </main>
   </div>
+
+  <!-- ====== JUEGO (pantalla completa) ====== -->
+  <div id="gameOverlay" class="game-overlay hidden">
+    <div class="game-frame">
+      <header class="game-top">
+        <button id="quitGameBtn" class="ghost small">✕ Salir</button>
+        <h3 id="gameTitle">Reto</h3>
+        <span id="gameScore" class="game-score">0 pts</span>
+      </header>
+      <div class="hud">
+        <span id="hearts">❤️❤️❤️</span>
+        <div class="game-progress"><span id="gameProgressBar"></span></div>
+        <span id="gameRound">0/10</span>
+        <span id="gameStreak" class="game-streak"></span>
+      </div>
+      <div id="questionArea" class="question-area"></div>
+      <div id="feedback" class="feedback"></div>
+    </div>
+  </div>
+
+  <!-- ====== MODAL DE NIVEL ====== -->
+  <div id="levelModal" class="level-modal hidden">
+    <div id="levelModalCard" class="level-modal-card"></div>
+  </div>
+
+  <div id="toast" class="toast"></div>
 
   <script src="app.js"></script>
 </body>
