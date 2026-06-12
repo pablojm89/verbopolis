@@ -30,16 +30,20 @@
         <label>Mi grupo
           <select id="loginGroupFilter"><option value="all">Todos los grupos</option></select>
         </label>
-        <button id="teacherLoginBtn" class="ghost">🔒 Zona maestro/a</button>
+        <div class="login-toolbar-btns">
+          <button id="refreshRosterBtn" class="ghost">🔄 Actualizar lista</button>
+          <button id="teacherLoginBtn" class="ghost">🔒 Zona maestro/a</button>
+        </div>
       </div>
       <h2>¿Quién va a jugar hoy?</h2>
       <div id="studentGrid" class="student-grid"></div>
       <div class="login-actions">
         <input id="newStudentName" placeholder="Tu nombre o alias" maxlength="32" />
         <select id="newStudentGroup"></select>
+        <input id="newStudentPw" placeholder="Tu contraseña secreta" maxlength="24" autocomplete="off" />
         <button id="addStudentBtn" class="secondary">➕ Crear personaje</button>
       </div>
-      <p class="tiny">Usa tu nombre de pila, iniciales o un alias. Sin contraseñas.</p>
+      <p class="tiny">Usa tu nombre de pila, iniciales o un alias. La contraseña protege tu personaje: si la olvidas, pídesela a tu maestro/a.</p>
     </section>
   </div>
 
@@ -233,8 +237,9 @@
               <h3>Radar docente</h3>
               <div id="teacherRadar" class="radar-grid"></div>
               <div class="row-wrap">
+                <button id="pullCloudBtn" class="primary">☁️ Traer progreso de la nube</button>
                 <button id="exportAllCsv" class="secondary">⬇️ Exportar progreso (CSV)</button>
-                <button id="syncAllBtn" class="primary">📡 Sincronizar todo</button>
+                <button id="syncAllBtn" class="ghost">📡 Sincronizar todo</button>
               </div>
             </article>
 
@@ -352,6 +357,11 @@
   <!-- ====== MODAL DE NIVEL ====== -->
   <div id="levelModal" class="level-modal hidden">
     <div id="levelModalCard" class="level-modal-card"></div>
+  </div>
+
+  <!-- ====== MODAL DE CONTRASEÑA ====== -->
+  <div id="pwModal" class="level-modal hidden">
+    <div id="pwModalCard" class="pw-card"></div>
   </div>
 
   <div id="toast" class="toast"></div>

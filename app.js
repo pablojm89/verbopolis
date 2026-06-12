@@ -419,6 +419,9 @@ const uid = () => 'id-' + Date.now().toString(36) + '-' + Math.random().toString
 const escapeHtml = str => String(str ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
 const stripAccents = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 const normalize = s => (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+// Codificación ligera de contraseñas: evita el cotilleo casual, no es cifrado fuerte.
+const encPw = p => { try { return p ? btoa(unescape(encodeURIComponent(p))).split('').reverse().join('') : ''; } catch { return ''; } };
+const decPw = e => { try { return e ? decodeURIComponent(escape(atob(e.split('').reverse().join('')))) : ''; } catch { return ''; } };
 const todayKey = () => new Date().toISOString().slice(0, 10);
 function weekKey() {
   const d = new Date(); const onejan = new Date(d.getFullYear(), 0, 1);
@@ -452,7 +455,7 @@ function getStudentState(sid) {
     weekly: { key: weekKey(), xp: 0 },
     daily: { last: '', count: 0 },
     subjOk: 0, irregularOk: 0, reviewFixed: 0,
-    cloudSaves: 0, lastSync: ''
+    cloudSaves: 0, lastSync: '', updatedAt: ''
   }, st);
 }
 function saveState() {
@@ -460,7 +463,42 @@ function saveState() {
   const s = students.find(x => x.id === state.id);
   if (s) { state.name = s.name; state.group = s.group; state.avatar = s.avatar; }
   checkBadges();
+  state.updatedAt = new Date().toISOString();
   saveJSON('verbopolis-state-' + state.id, state);
+}
+// Versión recortada del estado para la nube (la hoja tiene límite por celda)
+function slimState(st) {
+  const copy = JSON.parse(JSON.stringify(st));
+  copy.log = (copy.log || []).slice(0, 10);
+  copy.mistakes = (copy.mistakes || []).slice(0, 40);
+  copy.examsDone = (copy.examsDone || []).map((e, i, arr) => i >= arr.length - 2 ? e : { ...e, details: undefined });
+  return copy;
+}
+// Sube una «foto» del progreso a la hoja. Usa la cola: si no hay internet, irá después.
+function pushStateSnapshot() {
+  if (!state || !settings.backendUrl) return;
+  queue = queue.filter(e => !(e.type === 'state_snapshot' && e.studentId === state.id));
+  queueEvent('state_snapshot', { studentId: state.id, studentName: state.name, group: state.group, avatar: state.avatar, state: slimState(state) });
+  syncQueue(false);
+}
+// Recupera el progreso guardado en la hoja y lo adopta si va por delante del local.
+function fetchRemoteState(sid, localStamp) {
+  if (!settings.backendUrl) return;
+  jsonp('state', { studentId: sid }, res => {
+    if (!state || state.id !== sid) return;
+    const remote = res && res.ok && res.state;
+    if (remote && remote.updatedAt && remote.updatedAt > (localStamp || '') && (!game || !localStamp)) {
+      remote.id = sid;
+      saveJSON('verbopolis-state-' + sid, remote);
+      state = getStudentState(sid);
+      touchDaily();
+      saveState();
+      renderAll();
+      if (remote.xp) toast(`Tu progreso ha viajado contigo: ${state.xp} XP`, '🎒');
+    } else if (!remote || (remote.updatedAt || '') < (state.updatedAt || '')) {
+      pushStateSnapshot(); // la nube va por detrás: la ponemos al día
+    }
+  });
 }
 function maxLevelForGroup(group) {
   const lim = Number(groupLimits[group]);
@@ -550,6 +588,7 @@ function boot() {
   bindGlobalEvents();
   renderLogin();
   fetchRemoteConfig();
+  fetchRemoteRoster();
 }
 function applySettings() {
   document.body.classList.toggle('accessible', !!settings.accessible);
@@ -558,6 +597,11 @@ function applySettings() {
 function bindGlobalEvents() {
   $('#addStudentBtn').onclick = addStudent;
   $('#newStudentName').addEventListener('keydown', e => { if (e.key === 'Enter') addStudent(); });
+  $('#newStudentPw').addEventListener('keydown', e => { if (e.key === 'Enter') addStudent(); });
+  $('#refreshRosterBtn').onclick = () => {
+    $('#refreshRosterBtn').textContent = '⏳ Buscando…';
+    fetchRemoteRoster(() => { $('#refreshRosterBtn').textContent = '🔄 Actualizar lista'; });
+  };
   $('#loginGroupFilter').onchange = renderLogin;
   $('#teacherLoginBtn').onclick = () => { if (requestTeacherAccess()) enterTeacherDirect(); };
   $('#switchStudentBtn').onclick = switchStudent;
@@ -567,6 +611,21 @@ function bindGlobalEvents() {
   bindStudyEvents(); bindArenaEvents(); bindTeacherEvents();
   $('#practiceMistakes').onclick = startReviewGame;
   $('#forceSyncBtn').onclick = () => syncQueue(true);
+  // Último salvavidas: al cerrar la pestaña, manda la foto del progreso
+  window.addEventListener('beforeunload', () => {
+    if (!state || !settings.backendUrl) return;
+    try {
+      const ev = {
+        eventId: uid(), type: 'state_snapshot', createdAt: new Date().toISOString(),
+        classCode: settings.classCode || '', studentId: state.id, studentName: state.name,
+        group: state.group, avatar: state.avatar, data: { state: slimState(state) }
+      };
+      navigator.sendBeacon(settings.backendUrl, new Blob(
+        [JSON.stringify({ action: 'logBatch', classCode: settings.classCode || '', events: [ev] })],
+        { type: 'text/plain;charset=utf-8' }
+      ));
+    } catch { /* sin beacon: ya irá por la cola */ }
+  });
 }
 function renderLogin() {
   $('#loginGroupFilter').innerHTML = '<option value="all">Todos los grupos</option>' + groups.map(g => `<option>${escapeHtml(g)}</option>`).join('');
@@ -579,7 +638,7 @@ function renderLogin() {
     const rank = rankFor(st.xp);
     return `<button class="student-card" data-student="${s.id}">
       <span class="sc-avatar">${s.avatar}</span>
-      <strong>${escapeHtml(s.name)}</strong>
+      <strong>${s.pw ? '🔒 ' : ''}${escapeHtml(s.name)}</strong>
       <small>${escapeHtml(s.group || 'Sin grupo')}</small>
       <span class="sc-rank">${rank.emoji} ${rank.name}</span>
     </button>`;
@@ -591,17 +650,60 @@ function renderLogin() {
 function addStudent() {
   const name = $('#newStudentName').value.trim();
   if (!name) return;
-  const s = { id: uid(), name, group: $('#newStudentGroup').value || groups[0], avatar: AVATARS[students.length % 10].e };
+  const pwRaw = $('#newStudentPw').value.trim();
+  if (!pwRaw && !confirm('¿Seguro que quieres crear tu personaje SIN contraseña? Cualquiera podría entrar en él.')) {
+    $('#newStudentPw').focus();
+    return;
+  }
+  const s = { id: uid(), name, group: $('#newStudentGroup').value || groups[0], avatar: AVATARS[students.length % 10].e, pw: encPw(pwRaw) };
   students.push(s);
   saveJSON('verbopolis-students', students);
   $('#newStudentName').value = '';
+  $('#newStudentPw').value = '';
   renderLogin();
-  queueEvent('student_created', { studentId: s.id, studentName: s.name, group: s.group, avatar: s.avatar });
+  queueEvent('student_created', { studentId: s.id, studentName: s.name, group: s.group, avatar: s.avatar, clave: pwRaw });
+  syncQueue(true); // que llegue ya a la hoja, para que aparezca en los demás dispositivos
 }
 function loginStudent(sid) {
   const s = students.find(x => x.id === sid);
   if (!s) return;
+  if (s.pw && !teacherUnlocked) return openPwModal(s);
+  doLogin(s);
+}
+function openPwModal(s) {
+  $('#pwModal').classList.remove('hidden');
+  $('#pwModalCard').innerHTML = `
+    <button class="modal-close" id="closePwModal">✕</button>
+    <span class="pw-avatar">${s.avatar}</span>
+    <h3>¡Hola, ${escapeHtml(s.name)}!</h3>
+    <p class="pw-ask">Escribe tu contraseña secreta:</p>
+    <input id="pwInput" type="password" autocomplete="off" placeholder="•••••" />
+    <p class="pw-msg" id="pwMsg"></p>
+    <button class="primary big" id="pwSubmit">Entrar</button>
+    <p class="tiny">¿La has olvidado? Pídesela a tu maestro/a. 😉</p>`;
+  const tryLogin = () => {
+    if ($('#pwInput').value.trim() === decPw(s.pw)) {
+      closePwModal();
+      doLogin(s);
+    } else {
+      $('#pwMsg').textContent = 'Mmm… esa no es. ¡Inténtalo otra vez!';
+      $('#pwModalCard').classList.remove('shake');
+      void $('#pwModalCard').offsetWidth; // reinicia la animación
+      $('#pwModalCard').classList.add('shake');
+      $('#pwInput').value = '';
+      $('#pwInput').focus();
+      sndBad();
+    }
+  };
+  $('#pwSubmit').onclick = tryLogin;
+  $('#pwInput').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+  $('#closePwModal').onclick = closePwModal;
+  setTimeout(() => $('#pwInput').focus(), 60);
+}
+function closePwModal() { $('#pwModal').classList.add('hidden'); }
+function doLogin(s) {
   state = getStudentState(s.id);
+  const localStamp = state.updatedAt || ''; // antes de tocar nada, para comparar con la nube
   touchDaily();
   saveState();
   $('#loginScreen').classList.add('hidden');
@@ -610,8 +712,10 @@ function loginStudent(sid) {
   renderAll();
   queueEvent('login', { group: state.group });
   syncQueue(false);
+  fetchRemoteState(s.id, localStamp);
 }
 function switchStudent() {
+  pushStateSnapshot();
   state = null; game = null;
   $('#appShell').classList.add('hidden');
   $('#loginScreen').classList.remove('hidden');
@@ -840,6 +944,7 @@ function quitGame() {
   $('#gameOverlay').classList.add('hidden');
   document.body.classList.remove('playing');
   game = null;
+  pushStateSnapshot();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   renderAll();
 }
@@ -1173,7 +1278,7 @@ function endGame() {
     queueEvent('game_finished', { group: state.group, mode: game.kind, percentage: pct, score: game.score, correctInGame: game.correct, roundsPlayed: game.n, xp: state.xp, accuracy: state.total ? Math.round(state.correct / state.total * 100) : 0 });
   }
   logActivity(`${game.label}: ${pct}%${stars ? ' · ' + '★'.repeat(stars) : ''}`);
-  saveState(); syncQueue(false);
+  saveState(); pushStateSnapshot(); syncQueue(false);
 
   $('#questionArea').innerHTML = `<div class="end-screen">
     <span class="end-emoji">${bigEmoji}</span>
@@ -1383,7 +1488,7 @@ function endExam(pct) {
     note, correctInExam: game.correct, roundsPlayed: game.n, percentage: pct,
     tenses: game.exam.tenses.join('|'), xp: state.xp
   });
-  saveState(); syncQueue(true);
+  saveState(); pushStateSnapshot(); syncQueue(true);
   const failed = game.results.filter(r => !r.ok);
   $('#questionArea').innerHTML = `<div class="end-screen">
     <span class="end-emoji">${note >= 9 ? '🏅' : note >= 5 ? '😊' : '💪'}</span>
@@ -1414,6 +1519,7 @@ function bindTeacherEvents() {
   $('#exportAllCsv').onclick = exportAllCsv;
   $('#exportGradesCsv').onclick = exportGradesCsv;
   $('#syncAllBtn').onclick = () => syncQueue(true);
+  $('#pullCloudBtn').onclick = pullCloudProgress;
   $('#accessibleToggle').onchange = saveToggles;
   $('#quietToggle').onchange = saveToggles;
   $('#soundToggle').onchange = saveToggles;
@@ -1455,6 +1561,33 @@ function fillTeacherSelectors() {
   </label>`).join('');
 }
 function allStates() { return students.map(s => getStudentState(s.id)); }
+// Descarga el progreso de TODA la clase desde la hoja, para que tu panel
+// refleje lo que han hecho en cualquier dispositivo.
+function pullCloudProgress() {
+  if (!settings.backendUrl) return alert('Configura primero la URL de Apps Script.');
+  const btn = $('#pullCloudBtn');
+  btn.textContent = '⏳ Descargando…'; btn.disabled = true;
+  const restore = () => { btn.textContent = '☁️ Traer progreso de la nube'; btn.disabled = false; };
+  fetchRemoteRoster(() => {
+    jsonp('states', { classCode: settings.classCode || '' }, res => {
+      let n = 0;
+      if (res && res.ok && Array.isArray(res.states)) {
+        res.states.forEach(r => {
+          if (!r.studentId || !r.state) return;
+          const local = loadJSON('verbopolis-state-' + r.studentId, null);
+          if (!local || (local.updatedAt || '') < (r.state.updatedAt || '')) {
+            r.state.id = r.studentId;
+            saveJSON('verbopolis-state-' + r.studentId, r.state);
+            n++;
+          }
+        });
+      }
+      restore();
+      renderClassSummary(); renderTeacherProgress(); renderTeacherExams();
+      toast(n ? `Progreso actualizado de ${n} alumno/a(s).` : 'Todo estaba ya al día.', '☁️');
+    }, () => { restore(); alert('No se pudo conectar con la hoja.'); });
+  });
+}
 function renderClassSummary() {
   const rows = allStates().sort((a, b) => b.xp - a.xp);
   $('#classSummary').innerHTML = rows.map((s, i) => {
@@ -1592,11 +1725,28 @@ function renderGroupStudentList() {
   $('#groupStudentList').innerHTML = `<div class="radar-grid">${groups.map(g => {
     const list = students.filter(s => s.group === g);
     return `<div class="radar-item"><h3>${escapeHtml(g)} · ${list.length}</h3>
-      ${list.map(s => `<p><strong>${s.avatar} ${escapeHtml(s.name)}</strong> <button class="ghost small" data-edit="${s.id}">✏️</button> <button class="ghost small danger" data-del="${s.id}">🗑️</button></p>`).join('') || '<small>Sin alumnado.</small>'}
+      ${list.map(s => `<p><strong>${s.avatar} ${escapeHtml(s.name)}</strong>
+        <span class="pw-chip" title="Contraseña del alumno/a">🔑 ${s.pw ? escapeHtml(decPw(s.pw)) : '<em>sin clave</em>'}</span>
+        <button class="ghost small" data-pw="${s.id}" title="Cambiar contraseña">🔑</button>
+        <button class="ghost small" data-edit="${s.id}" title="Editar nombre/grupo">✏️</button>
+        <button class="ghost small danger" data-del="${s.id}" title="Borrar">🗑️</button></p>`).join('') || '<small>Sin alumnado.</small>'}
     </div>`;
   }).join('')}</div>`;
   $$('[data-edit]').forEach(b => b.onclick = () => editStudent(b.dataset.edit));
   $$('[data-del]').forEach(b => b.onclick = () => deleteStudent(b.dataset.del));
+  $$('[data-pw]').forEach(b => b.onclick = () => setStudentPw(b.dataset.pw));
+}
+function setStudentPw(sid) {
+  const s = students.find(x => x.id === sid);
+  if (!s) return;
+  const p = prompt(`Nueva contraseña para ${s.name} (deja vacío para quitarla)`, decPw(s.pw));
+  if (p === null) return;
+  s.pw = encPw(p.trim());
+  saveJSON('verbopolis-students', students);
+  queueEvent('student_updated', { studentId: s.id, studentName: s.name, group: s.group, avatar: s.avatar, clave: p.trim() });
+  syncQueue(true);
+  renderGroupStudentList();
+  toast(p.trim() ? `Contraseña de ${s.name} actualizada.` : `${s.name} se queda sin contraseña.`, '🔑');
 }
 function editStudent(sid) {
   const s = students.find(x => x.id === sid);
@@ -1608,15 +1758,19 @@ function editStudent(sid) {
   if (group.trim()) { if (!groups.includes(group.trim())) groups.push(group.trim()); s.group = group.trim(); }
   saveJSON('verbopolis-students', students);
   saveJSON('verbopolis-groups', groups);
+  queueEvent('student_updated', { studentId: s.id, studentName: s.name, group: s.group, avatar: s.avatar, clave: decPw(s.pw) });
+  syncQueue(true);
   fillTeacherSelectors(); renderGroupStudentList(); renderLogin();
 }
 function deleteStudent(sid) {
   const s = students.find(x => x.id === sid);
   if (!s) return;
-  if (!confirm(`¿Borrar a «${s.name}» y todo su progreso de este ordenador?`)) return;
+  if (!confirm(`¿Borrar a «${s.name}» y todo su progreso? Desaparecerá también de la lista de los demás dispositivos.`)) return;
   students = students.filter(x => x.id !== sid);
   saveJSON('verbopolis-students', students);
   localStorage.removeItem('verbopolis-state-' + sid);
+  queueEvent('student_deleted', { studentId: sid, studentName: s.name, group: s.group });
+  syncQueue(true);
   renderGroupStudentList(); renderLogin();
 }
 function renderTeacherSettings() {
@@ -1687,8 +1841,8 @@ function queueEvent(type, data = {}) {
   const payload = {
     eventId: (crypto.randomUUID ? crypto.randomUUID() : uid()), type,
     createdAt: new Date().toISOString(), classCode: settings.classCode || '',
-    studentId: state?.id || data.studentId || '', studentName: state?.name || data.studentName || '',
-    group: state?.group || data.group || '', avatar: state?.avatar || data.avatar || '', data
+    studentId: data.studentId || state?.id || '', studentName: data.studentName || state?.name || '',
+    group: data.group || state?.group || '', avatar: data.avatar || state?.avatar || '', data
   };
   queue.push(payload);
   queue = queue.slice(-800);
@@ -1731,6 +1885,45 @@ function publishConfig() {
   fetch(settings.backendUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'saveConfig', classCode: settings.classCode || '', config }) })
     .then(() => toast('Configuración publicada: misiones, evaluaciones y límites llegarán a todos los ordenadores.', '📡'))
     .catch(() => alert('No se pudo publicar. Inténtalo de nuevo.'));
+}
+// Descarga la lista de alumnado desde la hoja del maestro y la fusiona con la local.
+// Así los perfiles creados en un ordenador aparecen también en el móvil o la tablet.
+function fetchRemoteRoster(done) {
+  if (!settings.backendUrl) { done && done(); return; }
+  jsonp('students', { classCode: settings.classCode || '' }, res => {
+    if (res && res.ok && Array.isArray(res.students) && res.students.length) {
+      let changed = false;
+      const deletedPending = new Set(queue.filter(e => e.type === 'student_deleted').map(e => e.studentId));
+      res.students.forEach(r => {
+        if (!r.studentId || deletedPending.has(r.studentId)) return;
+        if (r.group && !groups.includes(r.group)) { groups.push(r.group); changed = true; }
+        const local = students.find(s => s.id === r.studentId);
+        const remotePw = r.pw ? encPw(r.pw) : '';
+        if (!local) {
+          students.push({ id: r.studentId, name: r.name || 'Alumno/a', group: r.group || groups[0], avatar: r.avatar || '🦉', pw: remotePw });
+          changed = true;
+        } else if (local.name !== r.name || local.group !== (r.group || local.group) || (r.pw !== undefined && local.pw !== remotePw)) {
+          local.name = r.name || local.name;
+          if (r.group) local.group = r.group;
+          if (r.avatar) local.avatar = r.avatar;
+          if (r.pw !== undefined) local.pw = remotePw;
+          changed = true;
+        }
+      });
+      // Elimina en local los borrados en la hoja, salvo los recién creados aún sin enviar
+      const remoteIds = new Set(res.students.map(r => r.studentId));
+      const pendingIds = new Set(queue.filter(e => e.type === 'student_created').map(e => e.studentId));
+      const before = students.length;
+      students = students.filter(s => remoteIds.has(s.id) || pendingIds.has(s.id));
+      if (students.length !== before) changed = true;
+      if (changed) {
+        saveJSON('verbopolis-students', students);
+        saveJSON('verbopolis-groups', groups);
+        renderLogin();
+      }
+    }
+    done && done();
+  }, () => { done && done(); });
 }
 function fetchRemoteConfig() {
   if (!settings.backendUrl) return;
